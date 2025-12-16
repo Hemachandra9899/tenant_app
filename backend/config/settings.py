@@ -11,9 +11,20 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Optionally load a local .env file when present (useful for local development).
+# Set the env var `DJANGO_READ_DOTENV` to `false` in production to skip this.
+if os.environ.get("DJANGO_READ_DOTENV", "true").lower() in ("1", "true", "yes"):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=BASE_DIR / '.env')
+    except Exception:
+        # python-dotenv may not be installed in production; ignore if unavailable
+        pass
 
 
 # Quick-start development settings - unsuitable for production
@@ -82,18 +93,21 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+DB_OPTIONS = {}
+if os.environ.get('DB_SSLMODE'):
+    DB_OPTIONS['sslmode'] = os.environ.get('DB_SSLMODE')
+if os.environ.get('DB_CHANNEL_BINDING'):
+    DB_OPTIONS['channel_binding'] = os.environ.get('DB_CHANNEL_BINDING')
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'neondb',
-        'USER': 'neondb_owner',
-        'PASSWORD': 'npg_hFSE3j8NVbvi',
-        'HOST': 'ep-patient-art-ahumwxv6-pooler.c-3.us-east-1.aws.neon.tech',
-        'PORT': '5432',
-        'OPTIONS': {
-            'sslmode': 'require',
-            'channel_binding': 'require',
-        }
+        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+        'NAME': os.environ.get('DB_NAME', 'neondb'),
+        'USER': os.environ.get('DB_USER', 'neondb_owner'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'OPTIONS': DB_OPTIONS,
     }
 }
 
