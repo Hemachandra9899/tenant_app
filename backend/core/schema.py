@@ -60,10 +60,14 @@ class Query(graphene.ObjectType):
             raise Exception("Organization not found")
 
     def resolve_projects(self, info, organizationSlug):
-        return Project.objects.filter(organization__slug=organizationSlug)
+        return Project.objects.filter(
+            organization__slug=organizationSlug
+        ).prefetch_related('tasks')
 
     def resolve_tasks(self, info, organizationSlug, projectId=None):
-        queryset = Task.objects.filter(project__organization__slug=organizationSlug)
+        queryset = Task.objects.filter(
+            project__organization__slug=organizationSlug
+        ).select_related('project').prefetch_related('comments')
         if projectId:
             queryset = queryset.filter(project_id=projectId)
         return queryset
@@ -71,28 +75,28 @@ class Query(graphene.ObjectType):
     def resolve_taskComments(self, info, taskId, organizationSlug):
         try:
             task = Task.objects.get(pk=taskId, project__organization__slug=organizationSlug)
-            return TaskComment.objects.filter(task=task)
+            return TaskComment.objects.filter(task=task).select_related('task')
         except Task.DoesNotExist:
             return []
 
     def resolve_projectStatistics(self, info, organizationSlug, projectId=None):
         try:
             organization = Organization.objects.get(slug=organizationSlug)
-            projects = Project.objects.filter(organization=organization)
+            projects = Project.objects.filter(organization=organization).prefetch_related('tasks')
             
             if projectId:
                 projects = projects.filter(pk=projectId)
             
             total_projects = projects.count()
-            total_tasks = Task.objects.filter(project__organization=organization).count()
-            completed_tasks = Task.objects.filter(project__organization=organization, status='DONE').count()
-            active_tasks = Task.objects.filter(project__organization=organization, status='IN_PROGRESS').count()
             
-            if projectId:
-                project_tasks = Task.objects.filter(project_id=projectId)
-                total_tasks = project_tasks.count()
-                completed_tasks = project_tasks.filter(status='DONE').count()
-                active_tasks = project_tasks.filter(status='IN_PROGRESS').count()
+            # Aggregate statistics from prefetched tasks to avoid extra queries
+            all_tasks = []
+            for project in projects:
+                all_tasks.extend(project.tasks.all())
+            
+            total_tasks = len(all_tasks)
+            completed_tasks = sum(1 for task in all_tasks if task.status == 'DONE')
+            active_tasks = sum(1 for task in all_tasks if task.status == 'IN_PROGRESS')
             
             completion_rate = round((completed_tasks / total_tasks * 100), 2) if total_tasks > 0 else 0.0
             
